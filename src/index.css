@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background-color: #111419;
+  color: #ECEBE7;
+  font-family: 'Plus Jakarta Sans', Inter, sans-serif;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* Tabular numerals for prices and numbers */
+.num-mono {
+  font-family: 'IBM Plex Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom terminal scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111419;
+}
+::-webkit-scrollbar-thumb {
+  background: #202731;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2A3340;
+}
