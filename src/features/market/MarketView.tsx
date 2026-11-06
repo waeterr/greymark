@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useUIStore } from '../../store/uiStore';
 import { ItemCategory } from '../../types/game.types';
-import { Search, TrendingUp, TrendingDown, Minus, ArrowRight } from 'lucide-react';
+import { Search, TrendingUp, TrendingDown, Minus, ArrowRight, Activity, Eye } from 'lucide-react';
+import { MarketInspector } from './MarketInspector';
 
 const CATEGORIES: Array<{ id: ItemCategory | 'all'; label: string }> = [
   { id: 'all', label: 'All Commodities' },
@@ -16,10 +17,12 @@ const CATEGORIES: Array<{ id: ItemCategory | 'all'; label: string }> = [
 
 export const MarketView: React.FC = () => {
   const items = useGameStore((s) => s.state.items);
+  const activeEvents = useGameStore((s) => s.state.activeEvents);
   const selectItem = useUIStore((s) => s.selectItem);
   const setActiveView = useUIStore((s) => s.setActiveView);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeCategory, setActiveCategory] = useState<ItemCategory | 'all'>('all');
+  const [inspectedItemId, setInspectedItemId] = useState<string | null>(null);
 
   const itemList = Object.values(items).filter((item) => {
     const matchesCat = activeCategory === 'all' || item.category === activeCategory;
@@ -34,8 +37,47 @@ export const MarketView: React.FC = () => {
     setActiveView('trading');
   };
 
+  const inspectedItem = inspectedItemId ? items[inspectedItemId] : null;
+
   return (
     <div className="space-y-6">
+      {/* Active Economic Events Banner */}
+      {activeEvents.length > 0 && (
+        <div className="space-y-2">
+          {activeEvents.map((evt) => (
+            <div
+              key={evt.id}
+              className={`p-3 rounded border flex items-start gap-3 ${
+                evt.severity === 'major'
+                  ? 'bg-terminal-red/10 border-terminal-red/30'
+                  : evt.severity === 'moderate'
+                  ? 'bg-terminal-gold/10 border-terminal-gold/30'
+                  : 'bg-terminal-blue/10 border-terminal-blue/30'
+              }`}
+            >
+              <Activity
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  evt.severity === 'major'
+                    ? 'text-terminal-red'
+                    : evt.severity === 'moderate'
+                    ? 'text-terminal-gold'
+                    : 'text-terminal-blue'
+                }`}
+              />
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-terminal-text">{evt.title}</span>
+                  <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-terminal-surface text-terminal-muted border border-terminal-border">
+                    {evt.remainingDays}d remaining
+                  </span>
+                </div>
+                <p className="text-xs text-terminal-muted mt-0.5">{evt.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Search and Filters Header */}
       <div className="bg-terminal-card p-4 rounded border border-terminal-border flex flex-col md:flex-row gap-4 items-stretch md:items-center justify-between">
         <div className="relative flex-1 max-w-md">
@@ -137,13 +179,22 @@ export const MarketView: React.FC = () => {
                       )}
                     </td>
                     <td className="p-3 text-right">
-                      <button
-                        onClick={() => handleTradeItem(item.id)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-terminal-surface border border-terminal-border rounded text-terminal-gold hover:bg-terminal-gold hover:text-terminal-bg transition-colors font-medium text-xs"
-                      >
-                        <span>Trade</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
+                      <div className="inline-flex items-center gap-1.5">
+                        <button
+                          onClick={() => setInspectedItemId(item.id)}
+                          title="Inspect Telemetry & Arbitrage"
+                          className="p-1 rounded bg-terminal-surface border border-terminal-border text-terminal-muted hover:text-terminal-text"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleTradeItem(item.id)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-terminal-surface border border-terminal-border rounded text-terminal-gold hover:bg-terminal-gold hover:text-terminal-bg transition-colors font-medium text-xs"
+                        >
+                          <span>Trade</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -152,6 +203,20 @@ export const MarketView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Slide-over Inspector Drawer */}
+      {inspectedItem && (
+        <>
+          <div
+            onClick={() => setInspectedItemId(null)}
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40"
+          />
+          <MarketInspector
+            item={inspectedItem}
+            onClose={() => setInspectedItemId(null)}
+          />
+        </>
+      )}
     </div>
   );
 };

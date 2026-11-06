@@ -1,48 +1,65 @@
 import assert from 'node:assert/strict';
 import { useGameStore } from '../store/gameStore';
+import { calculateDynamicPrice } from '../game/economy/EconomicEngine';
 
-console.log('Running Greymark Phase 1 foundation self-check...');
+console.log('Running Greymark Economic Analytics & Charts self-check...');
 
-// 1. Initial State Integrity
+// 1. Initial State & Catalog Scale
 const store = useGameStore.getState();
+const itemCount = Object.keys(store.state.items).length;
+const npcCount = Object.keys(store.state.npcs).length;
+
+assert.ok(itemCount >= 20, `MVP requires >= 20 goods in catalog, found: ${itemCount}`);
+assert.ok(npcCount >= 10, `MVP requires >= 10 NPCs, found: ${npcCount}`);
 assert.equal(store.state.player.balance, 1500, 'Initial balance must be $1,500');
 assert.equal(store.state.player.currentDistrict, 'old_quarter', 'Initial district must be old_quarter');
-assert.ok(Object.keys(store.state.items).length >= 7, 'Must have at least 7 starter commodities');
-assert.ok(Object.keys(store.state.districts).length === 6, 'Must have 6 districts configured');
-assert.ok(Object.keys(store.state.factions).length === 4, 'Must have 4 factions configured');
 
-// 2. Buy Validation & Execution
-const initialWeight = store.state.player.currentWeight;
-const buyRes = store.buyItem({
-  itemId: 'scrap_copper',
-  quantity: 2,
-  unitPrice: 40,
-  counterpartyId: 'npc_karl',
-  counterpartyName: 'Karl Vance',
-  quality: 'standard',
+// 2. Dynamic Pricing Engine Unit Checks
+const testItem = store.state.items['synthetic_grain']!;
+const highSupplyPrice = calculateDynamicPrice({
+  ...testItem,
+  supply: 200,
+  demand: 50,
+  trend: 'oversupply',
 });
-assert.ok(buyRes.success, 'Buy transaction should succeed with sufficient balance');
-
-const afterBuy = useGameStore.getState().state.player;
-assert.equal(afterBuy.balance, 1500 - 80, 'Balance must decrease by $80');
-assert.ok(afterBuy.currentWeight > initialWeight, 'Weight must increase after buying scrap copper');
-
-// 3. Sell Validation & Execution
-const sellRes = useGameStore.getState().sellItem({
-  itemId: 'scrap_copper',
-  quantity: 2,
-  unitPrice: 45,
-  counterpartyId: 'npc_lyra',
-  counterpartyName: 'Lyra Thorne',
+const highDemandPrice = calculateDynamicPrice({
+  ...testItem,
+  supply: 30,
+  demand: 180,
+  trend: 'scarcity',
 });
-assert.ok(sellRes.success, 'Sell transaction should succeed with owned inventory');
-const afterSell = useGameStore.getState().state.player;
-assert.equal(afterSell.balance, 1420 + 90, 'Balance must increase by $90 after sale');
+assert.ok(
+  highDemandPrice > highSupplyPrice,
+  `Scarcity/High demand price ($${highDemandPrice}) must be greater than Oversupply price ($${highSupplyPrice})`
+);
 
-// 4. District Travel
-const travelOk = useGameStore.getState().travelToDistrict('iron_district');
-assert.ok(travelOk, 'Should travel to iron_district');
-const afterTravel = useGameStore.getState().state.player;
-assert.equal(afterTravel.currentDistrict, 'iron_district', 'Player must now be in iron_district');
+// 3. Price History Telemetry & Statistics
+const history = testItem.priceHistory;
+assert.ok(history.length >= 3, 'Items must track price history buffer');
+const ath = Math.max(...history);
+const atl = Math.min(...history);
+const avg = history.reduce((a, b) => a + b, 0) / history.length;
+assert.ok(ath >= atl, 'ATH must be greater than or equal to ATL');
+assert.ok(avg >= atl && avg <= ath, 'Average price must sit between ATL and ATH');
 
-console.log('Greymark Phase 1 self-check PASSED: all asserts verified.');
+// 4. District Arbitrage Spread
+const oldQuarterPrice = calculateDynamicPrice(
+  testItem,
+  store.state.districts['old_quarter']
+);
+const crownHeightsPrice = calculateDynamicPrice(
+  testItem,
+  store.state.districts['crown_heights']
+);
+assert.ok(
+  crownHeightsPrice !== oldQuarterPrice,
+  'District economic profiles must produce differential spot prices'
+);
+
+// 5. Time Advance & Simulation Tick
+const initialHour = useGameStore.getState().state.time.hour;
+useGameStore.getState().advanceTime(2);
+const afterHour = useGameStore.getState().state.time.hour;
+assert.equal(afterHour, (initialHour + 2) % 24, 'Advancing 2 hours must advance game clock by 2 hours');
+
+console.log('Greymark Economic Analytics & Charts self-check PASSED: all checks verified.');

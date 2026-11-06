@@ -1,4 +1,6 @@
 import { District, DistrictId, Faction, FactionId, GameState, Item } from '../types/game.types';
+import { EXTENDED_ITEMS } from './extendedItems';
+import { EXTENDED_NPCS } from './extendedNPCs';
 
 export const INITIAL_DISTRICTS: Record<DistrictId, District> = {
   old_quarter: {
@@ -258,49 +260,10 @@ export const INITIAL_GAME_STATE: GameState = {
     ],
   },
   districts: INITIAL_DISTRICTS,
-  items: INITIAL_ITEMS,
-  npcs: {
-    npc_karl: {
-      id: 'npc_karl',
-      name: 'Karl Vance',
-      districtId: 'old_quarter',
-      role: 'supplier',
-      personality: 'cautious',
-      wealth: 4200,
-      trust: 20,
-      reputation: 35,
-      inventory: [
-        { itemId: 'synthetic_grain', quantity: 25, price: 23 },
-        { itemId: 'filter_cartridge', quantity: 15, price: 56 },
-      ],
-    },
-    npc_lyra: {
-      id: 'npc_lyra',
-      name: 'Lyra Thorne',
-      districtId: 'old_quarter',
-      role: 'dealer',
-      personality: 'opportunistic',
-      wealth: 5600,
-      trust: 15,
-      reputation: 40,
-      inventory: [],
-    },
-    npc_merek: {
-      id: 'npc_merek',
-      name: 'Merek Sterling',
-      districtId: 'iron_district',
-      role: 'supplier',
-      personality: 'aggressive',
-      wealth: 12400,
-      trust: 5,
-      reputation: 60,
-      inventory: [
-        { itemId: 'scrap_copper', quantity: 80, price: 38 },
-        { itemId: 'servo_motor', quantity: 20, price: 168 },
-      ],
-    },
-  },
+  items: EXTENDED_ITEMS,
+  npcs: EXTENDED_NPCS,
   factions: INITIAL_FACTIONS,
+  activeEvents: [],
   transactions: [
     {
       id: 'tx_init_1',

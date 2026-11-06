@@ -15,6 +15,7 @@ export const DashboardView: React.FC = () => {
   const items = useGameStore((s) => s.state.items);
   const districts = useGameStore((s) => s.state.districts);
   const transactions = useGameStore((s) => s.state.transactions);
+  const activeEvents = useGameStore((s) => s.state.activeEvents);
   const currentDistrict = districts[player.currentDistrict];
   const setActiveView = useUIStore((s) => s.setActiveView);
   const addToast = useUIStore((s) => s.addToast);
@@ -62,6 +63,38 @@ export const DashboardView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Active Economic Events Banner */}
+      {activeEvents.length > 0 && (
+        <div className="bg-terminal-card p-4 rounded border border-terminal-gold/40 flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-mono uppercase text-terminal-gold font-bold">
+              Active Economic Shift Intercept
+            </span>
+            <span className="text-[10px] font-mono text-terminal-muted">
+              {activeEvents.length} Event(s) Active
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
+            {activeEvents.map((evt) => (
+              <div
+                key={evt.id}
+                className="bg-terminal-surface p-3 rounded border border-terminal-border text-xs flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between font-bold text-terminal-text">
+                    <span>{evt.title}</span>
+                    <span className="num-mono text-[10px] text-terminal-gold">
+                      {evt.remainingDays}d left
+                    </span>
+                  </div>
+                  <p className="text-terminal-muted text-[11px] mt-1">{evt.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

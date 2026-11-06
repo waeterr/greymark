@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useUIStore } from '../../store/uiStore';
 import { Check, AlertCircle, ShoppingCart, DollarSign } from 'lucide-react';
+import { PriceChart } from '../../components/charts/PriceChart';
 
 export const TradingView: React.FC = () => {
   const player = useGameStore((s) => s.state.player);
@@ -181,6 +182,19 @@ export const TradingView: React.FC = () => {
                     ${unitPrice.toFixed(2)}
                   </div>
                 </div>
+              </div>
+
+              {/* Price Telemetry Chart */}
+              <div>
+                <div className="flex justify-between items-center text-[10px] font-mono text-terminal-muted mb-1">
+                  <span>Price History & Trend ({currentItem.trend.toUpperCase()})</span>
+                  <span>Supply: {currentItem.supply} • Demand: {currentItem.demand}</span>
+                </div>
+                <PriceChart
+                  data={currentItem.priceHistory}
+                  basePrice={currentItem.basePrice}
+                  height={90}
+                />
               </div>
 
               {/* Quantity Selector */}

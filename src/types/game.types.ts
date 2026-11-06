@@ -148,6 +148,23 @@ export interface PlayerState {
   inventory: InventorySlot[];
 }
 
+export type EventCategory = 'crisis' | 'boom' | 'regulation' | 'trend' | 'tech';
+
+export interface EconomicEvent {
+  id: string;
+  title: string;
+  description: string;
+  category: EventCategory;
+  severity: 'minor' | 'moderate' | 'major';
+  durationDays: number;
+  remainingDays: number;
+  affectedDistricts: DistrictId[] | 'all';
+  affectedCategories: ItemCategory[] | 'all';
+  priceMultiplier: number;
+  supplyMultiplier: number;
+  demandMultiplier: number;
+}
+
 export interface GameState {
   seed: string;
   time: GameTime;
@@ -157,6 +174,7 @@ export interface GameState {
   npcs: Record<string, NPC>;
   factions: Record<FactionId, Faction>;
   transactions: Transaction[];
+  activeEvents: EconomicEvent[];
 }
 
 export type NavView =

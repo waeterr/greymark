@@ -1,12 +1,17 @@
 import { create } from 'zustand';
 import { GameState, ItemQuality } from '../types/game.types';
 import { INITIAL_GAME_STATE } from '../data/initialData';
+import {
+  calculateDynamicPrice,
+  simulateMarketTick,
+} from '../game/economy/EconomicEngine';
 
 interface GameStore {
   state: GameState;
-  
+
   initializeGame: () => void;
   loadGame: (state: GameState) => void;
+  advanceTime: (hours?: number) => void;
   travelToDistrict: (districtId: GameState['player']['currentDistrict']) => boolean;
   buyItem: (params: {
     itemId: string;
@@ -31,27 +36,30 @@ export const useGameStore = create<GameStore>((set, get) => ({
   initializeGame: () => set({ state: INITIAL_GAME_STATE }),
   loadGame: (state) => set({ state }),
 
+  advanceTime: (hours = 1) => {
+    set((current) => ({
+      state: simulateMarketTick(current.state, hours),
+    }));
+  },
+
   travelToDistrict: (districtId) => {
     const s = get().state;
     const dest = s.districts[districtId];
     if (!dest || !dest.unlocked) return false;
     if (s.player.balance < dest.transportCost) return false;
 
-    set((current) => ({
-      state: {
-        ...current.state,
-        player: {
-          ...current.state.player,
-          balance: current.state.player.balance - dest.transportCost,
-          currentDistrict: districtId,
-        },
-        time: {
-          ...current.state.time,
-          hour: (current.state.time.hour + 1) % 24,
-          day: current.state.time.hour + 1 >= 24 ? current.state.time.day + 1 : current.state.time.day,
-        },
+    // Travelling consumes 1 hour and recalculates prices for the new district
+    const stateWithNewDistrict: GameState = {
+      ...s,
+      player: {
+        ...s.player,
+        balance: s.player.balance - dest.transportCost,
+        currentDistrict: districtId,
       },
-    }));
+    };
+
+    const advanced = simulateMarketTick(stateWithNewDistrict, 1);
+    set({ state: advanced });
     return true;
   },
 
@@ -68,6 +76,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const addedWeight = item.weight * quantity;
     if (s.player.currentWeight + addedWeight > s.player.storageCapacity) {
       return { success: false, reason: 'Storage capacity exceeded' };
+    }
+
+    // Check if supplier has stock
+    const counterparty = s.npcs[counterpartyId];
+    if (counterparty) {
+      const npcSlot = counterparty.inventory.find((sl) => sl.itemId === itemId);
+      if (npcSlot && npcSlot.quantity < quantity) {
+        return { success: false, reason: `Supplier only has ${npcSlot.quantity} units available` };
+      }
     }
 
     set((current) => {
@@ -90,6 +107,42 @@ export const useGameStore = create<GameStore>((set, get) => ({
           averageBuyPrice: unitPrice,
           quality,
         });
+      }
+
+      // Deduct from supplier inventory if NPC
+      const updatedNpcs = { ...current.state.npcs };
+      if (counterparty && updatedNpcs[counterpartyId]) {
+        const targetNpc = updatedNpcs[counterpartyId]!;
+        const newNpcInv = targetNpc.inventory
+          .map((sl) => (sl.itemId === itemId ? { ...sl, quantity: sl.quantity - quantity } : sl))
+          .filter((sl) => sl.quantity > 0);
+
+        updatedNpcs[counterpartyId] = {
+          ...targetNpc,
+          wealth: targetNpc.wealth + totalCost,
+          trust: Math.min(100, targetNpc.trust + 1),
+          inventory: newNpcInv,
+        };
+      }
+
+      // Market impact: Buying lowers supply, slightly increases demand & price
+      const updatedItems = { ...current.state.items };
+      const currentItem = updatedItems[itemId];
+      if (currentItem) {
+        const newSupply = Math.max(1, currentItem.supply - Math.ceil(quantity * 0.5));
+        const newDemand = currentItem.demand + Math.ceil(quantity * 0.2);
+        const tempItem: typeof currentItem = {
+          ...currentItem,
+          supply: newSupply,
+          demand: newDemand,
+        };
+        const district = current.state.districts[current.state.player.currentDistrict];
+        const newPrice = calculateDynamicPrice(tempItem, district, current.state.activeEvents);
+        updatedItems[itemId] = {
+          ...tempItem,
+          currentPrice: newPrice,
+          priceHistory: [...currentItem.priceHistory, newPrice].slice(-15),
+        };
       }
 
       const tx = {
@@ -117,6 +170,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             currentWeight: current.state.player.currentWeight + addedWeight,
             inventory: inv,
           },
+          items: updatedItems,
+          npcs: updatedNpcs,
           transactions: [tx, ...current.state.transactions].slice(0, 50),
         },
       };
@@ -152,6 +207,47 @@ export const useGameStore = create<GameStore>((set, get) => ({
         };
       }
 
+      // Add to buyer inventory if NPC
+      const updatedNpcs = { ...current.state.npcs };
+      const counterparty = updatedNpcs[counterpartyId];
+      if (counterparty) {
+        const existingNpcSlot = counterparty.inventory.find((sl) => sl.itemId === itemId);
+        let newNpcInv = [...counterparty.inventory];
+        if (existingNpcSlot) {
+          newNpcInv = newNpcInv.map((sl) =>
+            sl.itemId === itemId ? { ...sl, quantity: sl.quantity + quantity } : sl
+          );
+        } else {
+          newNpcInv.push({ itemId, quantity, price: unitPrice });
+        }
+        updatedNpcs[counterpartyId] = {
+          ...counterparty,
+          wealth: Math.max(0, counterparty.wealth - totalRevenue),
+          trust: Math.min(100, counterparty.trust + 1),
+          inventory: newNpcInv,
+        };
+      }
+
+      // Market impact: Selling increases supply, slightly dampens demand & price
+      const updatedItems = { ...current.state.items };
+      const currentItem = updatedItems[itemId];
+      if (currentItem) {
+        const newSupply = currentItem.supply + Math.ceil(quantity * 0.5);
+        const newDemand = Math.max(1, currentItem.demand - Math.ceil(quantity * 0.2));
+        const tempItem: typeof currentItem = {
+          ...currentItem,
+          supply: newSupply,
+          demand: newDemand,
+        };
+        const district = current.state.districts[current.state.player.currentDistrict];
+        const newPrice = calculateDynamicPrice(tempItem, district, current.state.activeEvents);
+        updatedItems[itemId] = {
+          ...tempItem,
+          currentPrice: newPrice,
+          priceHistory: [...currentItem.priceHistory, newPrice].slice(-15),
+        };
+      }
+
       const tx = {
         id: `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         itemId,
@@ -178,6 +274,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             currentWeight: Math.max(0, current.state.player.currentWeight - freedWeight),
             inventory: inv,
           },
+          items: updatedItems,
+          npcs: updatedNpcs,
           transactions: [tx, ...current.state.transactions].slice(0, 50),
         },
       };
