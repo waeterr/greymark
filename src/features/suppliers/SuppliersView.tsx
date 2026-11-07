@@ -112,10 +112,14 @@ export const SuppliersView: React.FC = () => {
               </div>
 
               <button
-                onClick={() => setActiveView('trading')}
+                onClick={() => {
+                  const firstItem = supplier.inventory[0];
+                  if (firstItem) selectItem(firstItem.itemId);
+                  setActiveView('trading');
+                }}
                 className="w-full py-2 bg-terminal-surface border border-terminal-border rounded text-xs font-semibold text-terminal-text hover:text-terminal-gold hover:border-terminal-gold/50 flex items-center justify-center gap-1.5 transition-colors"
               >
-                <span>Initiate Negotiation</span>
+                <span>Initiate Negotiation Deck</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

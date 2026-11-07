@@ -5,6 +5,7 @@ import {
   Item,
   MarketTrend,
 } from '../../types/game.types';
+import { executeNPCAutonomousTrading } from '../npc/NPCDecisionEngine';
 
 export const EVENT_POOL: Omit<EconomicEvent, 'id' | 'remainingDays'>[] = [
   {
@@ -230,7 +231,7 @@ export function simulateMarketTick(
     }
   }
 
-  return {
+  const intermediateState: GameState = {
     ...state,
     time: {
       ...state.time,
@@ -242,4 +243,7 @@ export function simulateMarketTick(
     npcs: updatedNpcs,
     activeEvents: updatedEvents,
   };
+
+  // Run autonomous NPC trading intelligence
+  return executeNPCAutonomousTrading(intermediateState);
 }

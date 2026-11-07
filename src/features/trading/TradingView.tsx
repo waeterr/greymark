@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useGameStore } from '../../store/gameStore';
 import { useUIStore } from '../../store/uiStore';
-import { Check, AlertCircle, ShoppingCart, DollarSign } from 'lucide-react';
+import { Check, AlertCircle, ShoppingCart, DollarSign, Handshake } from 'lucide-react';
 import { PriceChart } from '../../components/charts/PriceChart';
+import { calculateNegotiationOutcome, NegotiationResult } from '../../game/npc/NegotiationEngine';
 
 export const TradingView: React.FC = () => {
   const player = useGameStore((s) => s.state.player);
@@ -20,6 +21,9 @@ export const TradingView: React.FC = () => {
     selectedItemId || Object.keys(items)[0] || ''
   );
   const [quantity, setQuantity] = useState<number>(1);
+  const [isNegotiating, setIsNegotiating] = useState<boolean>(false);
+  const [bidPrice, setBidPrice] = useState<number>(0);
+  const [negotiationResult, setNegotiationResult] = useState<NegotiationResult | null>(null);
 
   const currentItem = items[activeItemId];
   const localNpcs = Object.values(npcs).filter(
@@ -28,6 +32,13 @@ export const TradingView: React.FC = () => {
   const defaultNpc = localNpcs[0] || {
     id: 'npc_local_broker',
     name: 'District Broker',
+    districtId: player.currentDistrict,
+    role: 'broker' as const,
+    personality: 'cautious' as const,
+    wealth: 5000,
+    trust: 10,
+    reputation: 20,
+    inventory: [],
   };
 
   // Find inventory stock for current item
@@ -35,8 +46,14 @@ export const TradingView: React.FC = () => {
   const ownedQty = inventorySlot ? inventorySlot.quantity : 0;
 
   // Pricing
-  const unitPrice = currentItem ? currentItem.currentPrice : 0;
-  const totalPrice = unitPrice * quantity;
+  const spotPrice = currentItem ? currentItem.currentPrice : 0;
+  const effectiveUnitPrice = isNegotiating && negotiationResult?.outcome === 'accepted' 
+    ? negotiationResult.finalPrice 
+    : isNegotiating && negotiationResult?.outcome === 'counter_offer'
+    ? negotiationResult.counterOfferPrice || spotPrice
+    : spotPrice;
+
+  const totalPrice = effectiveUnitPrice * quantity;
   const requiredWeight = currentItem ? currentItem.weight * quantity : 0;
   const remainingCapacity = player.storageCapacity - player.currentWeight;
 
@@ -45,6 +62,40 @@ export const TradingView: React.FC = () => {
   const hasStock = mode === 'sell' ? ownedQty >= quantity : true;
   const isValid = quantity > 0 && (mode === 'buy' ? canAfford && hasCapacity : hasStock);
 
+  // Initialize custom bid when toggling negotiation
+  const handleToggleNegotiation = () => {
+    if (!isNegotiating) {
+      // Default initial bid offer: 10% discount for buy, 10% markup for sell
+      const initialOffer = mode === 'buy' ? spotPrice * 0.9 : spotPrice * 1.1;
+      setBidPrice(Math.round(initialOffer * 100) / 100);
+      setNegotiationResult(null);
+    }
+    setIsNegotiating(!isNegotiating);
+  };
+
+  const handleProposeBid = () => {
+    if (!currentItem) return;
+
+    const res = calculateNegotiationOutcome({
+      type: mode,
+      item: currentItem,
+      quantity,
+      offeredPrice: bidPrice,
+      npc: defaultNpc,
+      playerReputation: player.reputation,
+    });
+
+    setNegotiationResult(res);
+
+    if (res.outcome === 'accepted') {
+      addToast(res.reason, 'success');
+    } else if (res.outcome === 'counter_offer') {
+      addToast(res.reason, 'warning');
+    } else {
+      addToast(res.reason, 'error');
+    }
+  };
+
   const handleExecuteTrade = () => {
     if (!currentItem) return;
 
@@ -52,14 +103,16 @@ export const TradingView: React.FC = () => {
       const res = buyItem({
         itemId: currentItem.id,
         quantity,
-        unitPrice,
+        unitPrice: effectiveUnitPrice,
         counterpartyId: defaultNpc.id,
         counterpartyName: defaultNpc.name,
         quality: currentItem.quality,
       });
 
       if (res.success) {
-        addToast(`Acquired ${quantity}x ${currentItem.name}`, 'success');
+        addToast(`Acquired ${quantity}x ${currentItem.name} at $${effectiveUnitPrice.toFixed(2)}`, 'success');
+        setIsNegotiating(false);
+        setNegotiationResult(null);
       } else {
         addToast(res.reason || 'Transaction rejected', 'error');
       }
@@ -67,13 +120,15 @@ export const TradingView: React.FC = () => {
       const res = sellItem({
         itemId: currentItem.id,
         quantity,
-        unitPrice,
+        unitPrice: effectiveUnitPrice,
         counterpartyId: defaultNpc.id,
         counterpartyName: defaultNpc.name,
       });
 
       if (res.success) {
-        addToast(`Liquidated ${quantity}x ${currentItem.name}`, 'success');
+        addToast(`Liquidated ${quantity}x ${currentItem.name} at $${effectiveUnitPrice.toFixed(2)}`, 'success');
+        setIsNegotiating(false);
+        setNegotiationResult(null);
       } else {
         addToast(res.reason || 'Transaction rejected', 'error');
       }
@@ -88,6 +143,8 @@ export const TradingView: React.FC = () => {
           onClick={() => {
             setMode('buy');
             setQuantity(1);
+            setIsNegotiating(false);
+            setNegotiationResult(null);
           }}
           className={`flex-1 py-1.5 rounded text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${
             mode === 'buy'
@@ -102,6 +159,8 @@ export const TradingView: React.FC = () => {
           onClick={() => {
             setMode('sell');
             setQuantity(1);
+            setIsNegotiating(false);
+            setNegotiationResult(null);
           }}
           className={`flex-1 py-1.5 rounded text-xs font-semibold flex items-center justify-center gap-2 transition-colors ${
             mode === 'sell'
@@ -134,6 +193,8 @@ export const TradingView: React.FC = () => {
                     setActiveItemId(item.id);
                     selectItem(item.id);
                     setQuantity(1);
+                    setIsNegotiating(false);
+                    setNegotiationResult(null);
                   }}
                   className={`w-full text-left p-2.5 rounded border text-xs transition-colors flex items-center justify-between ${
                     isSelected
@@ -177,10 +238,17 @@ export const TradingView: React.FC = () => {
                   <p className="text-xs text-terminal-muted">{currentItem.description}</p>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-terminal-muted">Quoted Unit Price</div>
-                  <div className="num-mono text-2xl font-bold text-terminal-gold">
-                    ${unitPrice.toFixed(2)}
+                  <div className="text-xs text-terminal-muted">
+                    {isNegotiating ? 'Effective Agreed Rate' : 'Quoted Spot Price'}
                   </div>
+                  <div className="num-mono text-2xl font-bold text-terminal-gold">
+                    ${effectiveUnitPrice.toFixed(2)}
+                  </div>
+                  {isNegotiating && (
+                    <div className="text-[10px] font-mono text-terminal-muted">
+                      Original: ${spotPrice.toFixed(2)}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -197,13 +265,69 @@ export const TradingView: React.FC = () => {
                 />
               </div>
 
+              {/* Negotiation Proposal Box */}
+              <div className="bg-terminal-surface/40 p-3.5 rounded border border-terminal-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Handshake className="w-4 h-4 text-terminal-gold" />
+                    <span className="text-xs font-semibold text-terminal-text">
+                      Price Haggling & Negotiation
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleToggleNegotiation}
+                    className="text-xs font-mono text-terminal-gold hover:underline"
+                  >
+                    {isNegotiating ? 'Reset to Spot Price' : 'Propose Terms'}
+                  </button>
+                </div>
+
+                {isNegotiating && (
+                  <div className="space-y-2 pt-2 border-t border-terminal-border/60">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono text-terminal-muted">Offer Unit Price:</span>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={bidPrice}
+                        onChange={(e) => setBidPrice(parseFloat(e.target.value) || 0)}
+                        className="w-28 bg-terminal-bg border border-terminal-border px-2 py-1 text-xs num-mono text-terminal-gold font-bold rounded focus:outline-none focus:border-terminal-gold"
+                      />
+                      <button
+                        onClick={handleProposeBid}
+                        className="px-3 py-1 bg-terminal-gold text-terminal-bg font-bold rounded text-xs hover:bg-terminal-gold/90 transition-colors"
+                      >
+                        Submit Proposal
+                      </button>
+                    </div>
+
+                    {negotiationResult && (
+                      <div
+                        className={`p-2.5 rounded border text-xs font-mono flex items-start gap-2 ${
+                          negotiationResult.outcome === 'accepted'
+                            ? 'bg-terminal-green/10 border-terminal-green/30 text-terminal-green'
+                            : negotiationResult.outcome === 'counter_offer'
+                            ? 'bg-terminal-gold/10 border-terminal-gold/30 text-terminal-gold'
+                            : 'bg-terminal-red/10 border-terminal-red/30 text-terminal-red'
+                        }`}
+                      >
+                        <span className="font-bold uppercase shrink-0">
+                          [{negotiationResult.outcome.replace('_', ' ')}]:
+                        </span>
+                        <span>{negotiationResult.reason}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Quantity Selector */}
               <div className="bg-terminal-surface/60 p-4 rounded border border-terminal-border space-y-3">
                 <div className="flex items-center justify-between text-xs">
                   <span className="font-medium text-terminal-text">Transaction Volume</span>
                   <span className="text-terminal-muted num-mono">
                     {mode === 'buy'
-                      ? `Max Affordable: ${Math.floor(player.balance / (unitPrice || 1))}`
+                      ? `Max Affordable: ${Math.floor(player.balance / (effectiveUnitPrice || 1))}`
                       : `In Warehouse: ${ownedQty}`}
                   </span>
                 </div>
@@ -231,7 +355,7 @@ export const TradingView: React.FC = () => {
                   <button
                     onClick={() => {
                       if (mode === 'buy') {
-                        const maxAffordable = Math.floor(player.balance / unitPrice);
+                        const maxAffordable = Math.floor(player.balance / effectiveUnitPrice);
                         const maxWeight = Math.floor(remainingCapacity / currentItem.weight);
                         setQuantity(Math.max(1, Math.min(maxAffordable, maxWeight)));
                       } else {
@@ -293,10 +417,10 @@ export const TradingView: React.FC = () => {
             {/* Execute Button */}
             <div className="pt-6 border-t border-terminal-border mt-6">
               <button
-                disabled={!isValid}
+                disabled={!isValid || (isNegotiating && negotiationResult?.outcome === 'rejected')}
                 onClick={handleExecuteTrade}
                 className={`w-full py-3 rounded text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all ${
-                  isValid
+                  isValid && (!isNegotiating || negotiationResult?.outcome !== 'rejected')
                     ? mode === 'buy'
                       ? 'bg-terminal-blue text-white hover:bg-terminal-blue/90 shadow-md'
                       : 'bg-terminal-green text-terminal-bg hover:bg-terminal-green/90 shadow-md'
