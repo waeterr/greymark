@@ -8,7 +8,7 @@ import { NPC, Item } from '../../types/game.types';
 export interface NegotiationRequest {
   type: 'buy' | 'sell';
   item: Item;
-  quantity: number;
+  quantity?: number;
   offeredPrice: number;
   npc: NPC;
   playerReputation: number;

@@ -1,7 +1,8 @@
 import React from 'react';
 import { useGameStore } from '../../store/gameStore';
-import { Shield, BarChart2 } from 'lucide-react';
+import { Shield, BarChart2, CheckCircle2, Lock } from 'lucide-react';
 import { FactionId } from '../../types/game.types';
+import { checkFactionPrivileges } from '../../game/factions/FactionEngine';
 
 export const FactionsView: React.FC = () => {
   const factions = useGameStore((s) => s.state.factions);
@@ -22,6 +23,8 @@ export const FactionsView: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {(Object.values(factions) as Array<(typeof factions)[FactionId]>).map((faction) => {
+          const privileges = checkFactionPrivileges(faction.id, faction.reputation);
+
           return (
             <div
               key={faction.id}
@@ -68,11 +71,42 @@ export const FactionsView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="bg-terminal-surface p-3 rounded border border-terminal-border text-xs flex items-center justify-between">
-                <span className="text-terminal-muted">Faction Privileges</span>
-                <span className="font-mono text-terminal-text text-[11px]">
-                  {faction.reputation >= 20 ? 'Wholesale Clearance' : 'Standard Citizen Tariff'}
-                </span>
+              {/* Faction Privileges & Unlocks */}
+              <div className="space-y-2 pt-2 border-t border-terminal-border/60">
+                <div className="text-[10px] font-mono uppercase text-terminal-muted font-semibold">
+                  Privilege Clearance Tiers
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div
+                    className={`p-2 rounded border flex items-center gap-1.5 ${
+                      privileges.canAccessExclusiveContracts
+                        ? 'bg-terminal-green/10 border-terminal-green/30 text-terminal-green'
+                        : 'bg-terminal-surface border-terminal-border text-terminal-muted'
+                    }`}
+                  >
+                    {privileges.canAccessExclusiveContracts ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span className="text-[11px]">Exclusive Bounties (40+ REP)</span>
+                  </div>
+
+                  <div
+                    className={`p-2 rounded border flex items-center gap-1.5 ${
+                      privileges.priceDiscountModifier < 1.0
+                        ? 'bg-terminal-green/10 border-terminal-green/30 text-terminal-green'
+                        : 'bg-terminal-surface border-terminal-border text-terminal-muted'
+                    }`}
+                  >
+                    {privileges.priceDiscountModifier < 1.0 ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <Lock className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span className="text-[11px]">5% Wholesale Rebate (50+ REP)</span>
+                  </div>
+                </div>
               </div>
             </div>
           );

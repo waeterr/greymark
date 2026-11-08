@@ -6,6 +6,10 @@ import {
   MarketTrend,
 } from '../../types/game.types';
 import { executeNPCAutonomousTrading } from '../npc/NPCDecisionEngine';
+import {
+  simulateFactionConflict,
+  applyFactionDistrictModifiers,
+} from '../factions/FactionEngine';
 
 export const EVENT_POOL: Omit<EconomicEvent, 'id' | 'remainingDays'>[] = [
   {
@@ -245,5 +249,9 @@ export function simulateMarketTick(
   };
 
   // Run autonomous NPC trading intelligence
-  return executeNPCAutonomousTrading(intermediateState);
+  const afterNpcTrading = executeNPCAutonomousTrading(intermediateState);
+
+  // Run faction conflicts and district modifier updates
+  const afterFactionConflicts = simulateFactionConflict(afterNpcTrading);
+  return applyFactionDistrictModifiers(afterFactionConflicts);
 }

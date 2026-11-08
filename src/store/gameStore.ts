@@ -5,6 +5,7 @@ import {
   calculateDynamicPrice,
   simulateMarketTick,
 } from '../game/economy/EconomicEngine';
+import { awardTradingReputation } from '../game/factions/FactionEngine';
 
 interface GameStore {
   state: GameState;
@@ -161,20 +162,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
         hour: current.state.time.hour,
       };
 
-      return {
-        state: {
-          ...current.state,
-          player: {
-            ...current.state.player,
-            balance: current.state.player.balance - totalCost,
-            currentWeight: current.state.player.currentWeight + addedWeight,
-            inventory: inv,
-          },
-          items: updatedItems,
-          npcs: updatedNpcs,
-          transactions: [tx, ...current.state.transactions].slice(0, 50),
+      // Award faction reputation for trading in district
+      let stateWithRep = {
+        ...current.state,
+        player: {
+          ...current.state.player,
+          balance: current.state.player.balance - totalCost,
+          currentWeight: current.state.player.currentWeight + addedWeight,
+          inventory: inv,
         },
+        items: updatedItems,
+        npcs: updatedNpcs,
+        transactions: [tx, ...current.state.transactions].slice(0, 50),
       };
+
+      stateWithRep = awardTradingReputation(
+        stateWithRep,
+        current.state.player.currentDistrict,
+        totalCost
+      );
+
+      return { state: stateWithRep };
     });
 
     return { success: true };
@@ -265,20 +273,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
         profit,
       };
 
-      return {
-        state: {
-          ...current.state,
-          player: {
-            ...current.state.player,
-            balance: current.state.player.balance + totalRevenue,
-            currentWeight: Math.max(0, current.state.player.currentWeight - freedWeight),
-            inventory: inv,
-          },
-          items: updatedItems,
-          npcs: updatedNpcs,
-          transactions: [tx, ...current.state.transactions].slice(0, 50),
+      // Award faction reputation for trading in district
+      let stateWithRep = {
+        ...current.state,
+        player: {
+          ...current.state.player,
+          balance: current.state.player.balance + totalRevenue,
+          currentWeight: Math.max(0, current.state.player.currentWeight - freedWeight),
+          inventory: inv,
         },
+        items: updatedItems,
+        npcs: updatedNpcs,
+        transactions: [tx, ...current.state.transactions].slice(0, 50),
       };
+
+      stateWithRep = awardTradingReputation(
+        stateWithRep,
+        current.state.player.currentDistrict,
+        totalRevenue
+      );
+
+      return { state: stateWithRep };
     });
 
     return { success: true };
