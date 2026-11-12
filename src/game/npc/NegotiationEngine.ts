@@ -12,6 +12,7 @@ export interface NegotiationRequest {
   offeredPrice: number;
   npc: NPC;
   playerReputation: number;
+  skillBonus?: number;
 }
 
 export interface NegotiationResult {
@@ -25,7 +26,7 @@ export interface NegotiationResult {
 export function calculateNegotiationOutcome(
   request: NegotiationRequest
 ): NegotiationResult {
-  const { type, item, offeredPrice, npc, playerReputation } = request;
+  const { type, item, offeredPrice, npc, playerReputation, skillBonus = 0 } = request;
   const spotPrice = item.currentPrice;
 
   // Compute price deviation ratio
@@ -75,7 +76,7 @@ export function calculateNegotiationOutcome(
       break;
   }
 
-  const effectiveFlex = flexFactor + trustBonus + repBonus;
+  const effectiveFlex = flexFactor + trustBonus + repBonus + skillBonus;
 
   // Immediate Accept: Offer is within normal spot price or player offered generous terms
   if (type === 'buy' && priceRatio >= 1.0 - effectiveFlex * 0.4) {

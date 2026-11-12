@@ -4,6 +4,7 @@ import { useUIStore } from '../../store/uiStore';
 import { Check, AlertCircle, ShoppingCart, DollarSign, Handshake } from 'lucide-react';
 import { PriceChart } from '../../components/charts/PriceChart';
 import { calculateNegotiationOutcome, NegotiationResult } from '../../game/npc/NegotiationEngine';
+import { getActivePerks } from '../../game/progression/PlayerProgression';
 
 export const TradingView: React.FC = () => {
   const player = useGameStore((s) => s.state.player);
@@ -76,6 +77,8 @@ export const TradingView: React.FC = () => {
   const handleProposeBid = () => {
     if (!currentItem) return;
 
+    const perks = getActivePerks(player.unlockedSkills);
+
     const res = calculateNegotiationOutcome({
       type: mode,
       item: currentItem,
@@ -83,6 +86,7 @@ export const TradingView: React.FC = () => {
       offeredPrice: bidPrice,
       npc: defaultNpc,
       playerReputation: player.reputation,
+      skillBonus: perks.negotiationBonus,
     });
 
     setNegotiationResult(res);

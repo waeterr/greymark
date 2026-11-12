@@ -10,6 +10,10 @@ import {
   simulateFactionConflict,
   applyFactionDistrictModifiers,
 } from '../factions/FactionEngine';
+import {
+  calculatePassiveIncome,
+  applyTierPromotion,
+} from '../progression/PlayerProgression';
 
 export const EVENT_POOL: Omit<EconomicEvent, 'id' | 'remainingDays'>[] = [
   {
@@ -248,10 +252,23 @@ export function simulateMarketTick(
     activeEvents: updatedEvents,
   };
 
+  // Apply passive income from properties
+  const passiveIncome = calculatePassiveIncome(intermediateState.player.properties, hoursElapsed);
+  const stateWithIncome: GameState = {
+    ...intermediateState,
+    player: {
+      ...intermediateState.player,
+      balance: intermediateState.player.balance + passiveIncome,
+    },
+  };
+
   // Run autonomous NPC trading intelligence
-  const afterNpcTrading = executeNPCAutonomousTrading(intermediateState);
+  const afterNpcTrading = executeNPCAutonomousTrading(stateWithIncome);
 
   // Run faction conflicts and district modifier updates
   const afterFactionConflicts = simulateFactionConflict(afterNpcTrading);
-  return applyFactionDistrictModifiers(afterFactionConflicts);
+  const afterDistrictMods = applyFactionDistrictModifiers(afterFactionConflicts);
+
+  // Check and apply tier promotion
+  return applyTierPromotion(afterDistrictMods);
 }

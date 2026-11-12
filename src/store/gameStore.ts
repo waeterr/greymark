@@ -6,6 +6,11 @@ import {
   simulateMarketTick,
 } from '../game/economy/EconomicEngine';
 import { awardTradingReputation } from '../game/factions/FactionEngine';
+import {
+  applyTierPromotion,
+  getActivePerks,
+  SKILL_TREE,
+} from '../game/progression/PlayerProgression';
 
 interface GameStore {
   state: GameState;
@@ -29,6 +34,9 @@ interface GameStore {
     counterpartyId: string;
     counterpartyName: string;
   }) => { success: boolean; reason?: string };
+  purchaseProperty: (propertyId: string) => { success: boolean; reason?: string };
+  unlockPlayerSkill: (skillId: string) => { success: boolean; reason?: string };
+  promotePlayerTier: () => { success: boolean; reason?: string };
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -47,14 +55,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const s = get().state;
     const dest = s.districts[districtId];
     if (!dest || !dest.unlocked) return false;
-    if (s.player.balance < dest.transportCost) return false;
+
+    // Apply logistics perk transport reduction
+    const perks = getActivePerks(s.player.unlockedSkills);
+    const effectiveCost = Math.round(dest.transportCost * (1 - perks.transportCostReduction));
+    if (s.player.balance < effectiveCost) return false;
 
     // Travelling consumes 1 hour and recalculates prices for the new district
     const stateWithNewDistrict: GameState = {
       ...s,
       player: {
         ...s.player,
-        balance: s.player.balance - dest.transportCost,
+        balance: s.player.balance - effectiveCost,
         currentDistrict: districtId,
       },
     };
@@ -182,7 +194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         totalCost
       );
 
-      return { state: stateWithRep };
+      return { state: applyTierPromotion(stateWithRep) };
     });
 
     return { success: true };
@@ -293,9 +305,74 @@ export const useGameStore = create<GameStore>((set, get) => ({
         totalRevenue
       );
 
-      return { state: stateWithRep };
+      return { state: applyTierPromotion(stateWithRep) };
     });
 
+    return { success: true };
+  },
+
+  purchaseProperty: (propertyId: string) => {
+    const s = get().state;
+    const propIndex = s.player.properties.findIndex((p) => p.id === propertyId);
+    if (propIndex === -1) return { success: false, reason: 'Property not found' };
+
+    const property = s.player.properties[propIndex]!;
+    if (property.purchased) return { success: false, reason: 'Property already acquired' };
+    if (s.player.balance < property.cost) return { success: false, reason: 'Insufficient liquid funds' };
+
+    const updatedProps = [...s.player.properties];
+    updatedProps[propIndex] = { ...property, purchased: true };
+
+    const updatedPlayer = {
+      ...s.player,
+      balance: s.player.balance - property.cost,
+      storageCapacity: s.player.storageCapacity + property.capacityBonus,
+      properties: updatedProps,
+      skillPoints: s.player.skillPoints + 2, // Bonus skill points on asset expansion
+    };
+
+    const updatedState = applyTierPromotion({
+      ...s,
+      player: updatedPlayer,
+    });
+
+    set({ state: updatedState });
+    return { success: true };
+  },
+
+  unlockPlayerSkill: (skillId: string) => {
+    const s = get().state;
+    const skill = SKILL_TREE.find((sk) => sk.id === skillId);
+    if (!skill) return { success: false, reason: 'Skill not found' };
+    if (s.player.unlockedSkills.includes(skillId)) return { success: false, reason: 'Skill already acquired' };
+    if (s.player.skillPoints < skill.cost) return { success: false, reason: 'Insufficient skill points' };
+
+    const nextUnlocked = [...s.player.unlockedSkills, skillId];
+    const capacityBonus = skill.effect.capacityBonus || 0;
+
+    const updatedPlayer = {
+      ...s.player,
+      skillPoints: s.player.skillPoints - skill.cost,
+      unlockedSkills: nextUnlocked,
+      storageCapacity: s.player.storageCapacity + capacityBonus,
+    };
+
+    set({
+      state: {
+        ...s,
+        player: updatedPlayer,
+      },
+    });
+    return { success: true };
+  },
+
+  promotePlayerTier: () => {
+    const s = get().state;
+    const promoted = applyTierPromotion(s);
+    if (promoted.player.tier === s.player.tier) {
+      return { success: false, reason: 'Requirements not met for promotion' };
+    }
+    set({ state: promoted });
     return { success: true };
   },
 }));

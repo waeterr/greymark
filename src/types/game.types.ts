@@ -136,6 +136,20 @@ export interface Transaction {
   profit?: number;
 }
 
+export type PropertyType = 'warehouse' | 'retail_stall' | 'processing_lab' | 'brokerage_desk';
+
+export interface Property {
+  id: string;
+  name: string;
+  districtId: DistrictId;
+  type: PropertyType;
+  cost: number;
+  incomePerHour: number;
+  capacityBonus: number;
+  purchased: boolean;
+  description: string;
+}
+
 export interface PlayerState {
   name: string;
   balance: number;
@@ -146,6 +160,9 @@ export interface PlayerState {
   currentWeight: number;
   currentDistrict: DistrictId;
   inventory: InventorySlot[];
+  properties: Property[];
+  unlockedSkills: string[];
+  skillPoints: number;
 }
 
 export type EventCategory = 'crisis' | 'boom' | 'regulation' | 'trend' | 'tech';

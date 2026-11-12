@@ -1,7 +1,7 @@
-import { GameState, BusinessTier } from '../../types/game.types';
+import { GameState, BusinessTier, Property, DistrictId } from '../../types/game.types';
 
 /**
- * Player Progression Engine: Manages tier advancement, XP tracking, skill unlocks
+ * Player Progression Engine: Manages tier advancement, XP tracking, skill unlocks, and business assets
  */
 
 export const TIER_REQUIREMENTS: Record<BusinessTier, { minRep: number; minNetWorth: number }> = {
@@ -13,13 +13,116 @@ export const TIER_REQUIREMENTS: Record<BusinessTier, { minRep: number; minNetWor
   market_power: { minRep: 600, minNetWorth: 1000000 },
 };
 
+export const INITIAL_PROPERTIES: Property[] = [
+  {
+    id: 'prop_old_quarter_stall',
+    name: 'Old Quarter Market Stall',
+    districtId: 'old_quarter',
+    type: 'retail_stall',
+    cost: 1200,
+    incomePerHour: 15,
+    capacityBonus: 15,
+    purchased: false,
+    description: 'A modest street stall in the Bazaar generating steady pedestrian retail trade.',
+  },
+  {
+    id: 'prop_iron_scrap_depot',
+    name: 'Iron Foundry Yard',
+    districtId: 'iron_district',
+    type: 'warehouse',
+    cost: 3200,
+    incomePerHour: 35,
+    capacityBonus: 50,
+    purchased: false,
+    description: 'Heavy industrial depot space equipped for bulky scrap metals and parts.',
+  },
+  {
+    id: 'prop_harborline_wharf',
+    name: 'Harbor Bonded Wharf',
+    districtId: 'harborline',
+    type: 'warehouse',
+    cost: 6500,
+    incomePerHour: 75,
+    capacityBonus: 100,
+    purchased: false,
+    description: 'High-throughput maritime storage bay with direct dockside crane access.',
+  },
+  {
+    id: 'prop_neon_kiosk',
+    name: 'Neon Row Holo-Kiosk',
+    districtId: 'neon_row',
+    type: 'retail_stall',
+    cost: 12000,
+    incomePerHour: 140,
+    capacityBonus: 20,
+    purchased: false,
+    description: 'High-foot-traffic holographic showcase catering to luxury cybernetic clientele.',
+  },
+  {
+    id: 'prop_ashmarket_lab',
+    name: 'Ashmarket Extraction Lab',
+    districtId: 'ashmarket',
+    type: 'processing_lab',
+    cost: 22000,
+    incomePerHour: 260,
+    capacityBonus: 35,
+    purchased: false,
+    description: 'Subterranean refinery pod processing raw reagents into high-potency goods.',
+  },
+  {
+    id: 'prop_crown_desk',
+    name: 'Crown Heights Trading Desk',
+    districtId: 'crown_heights',
+    type: 'brokerage_desk',
+    cost: 45000,
+    incomePerHour: 550,
+    capacityBonus: 60,
+    purchased: false,
+    description: 'Exclusive corporate suite executing high-margin algorithmic commodity arbitrage.',
+  },
+];
+
+export const DISTRICT_TIER_REQUIREMENTS: Record<DistrictId, BusinessTier> = {
+  old_quarter: 'street_trader',
+  iron_district: 'street_trader',
+  harborline: 'street_trader',
+  neon_row: 'independent_merchant',
+  ashmarket: 'established_dealer',
+  crown_heights: 'market_operator',
+};
+
+const TIER_ORDER: BusinessTier[] = [
+  'street_trader',
+  'independent_merchant',
+  'established_dealer',
+  'market_operator',
+  'trade_magnate',
+  'market_power',
+];
+
+export function isDistrictUnlockedForTier(districtId: DistrictId, tier: BusinessTier): boolean {
+  const reqTier = DISTRICT_TIER_REQUIREMENTS[districtId];
+  if (!reqTier) return true;
+  return TIER_ORDER.indexOf(tier) >= TIER_ORDER.indexOf(reqTier);
+}
+
 export function calculatePlayerNetWorth(state: GameState): number {
   const inventoryValue = state.player.inventory.reduce((sum, slot) => {
     const item = state.items[slot.itemId];
     return sum + (item ? item.currentPrice * slot.quantity : 0);
   }, 0);
 
-  return state.player.balance + inventoryValue - state.player.debt;
+  const propertyValue = (state.player.properties || [])
+    .filter((p) => p.purchased)
+    .reduce((sum, p) => sum + p.cost, 0);
+
+  return state.player.balance + inventoryValue + propertyValue - state.player.debt;
+}
+
+export function calculatePassiveIncome(properties: Property[], hours: number): number {
+  return (properties || [])
+    .filter((p) => p.purchased)
+    .reduce((sum, p) => sum + p.incomePerHour * hours, 0);
 }
 
 export function checkTierEligibility(
@@ -27,18 +130,9 @@ export function checkTierEligibility(
   reputation: number,
   netWorth: number
 ): BusinessTier | null {
-  const tiers: BusinessTier[] = [
-    'street_trader',
-    'independent_merchant',
-    'established_dealer',
-    'market_operator',
-    'trade_magnate',
-    'market_power',
-  ];
-
-  const currentIdx = tiers.indexOf(currentTier);
-  const nextTier = tiers[currentIdx + 1];
-  if (!nextTier) return null; // Already max tier
+  const currentIdx = TIER_ORDER.indexOf(currentTier);
+  const nextTier = TIER_ORDER[currentIdx + 1];
+  if (!nextTier) return null;
 
   const req = TIER_REQUIREMENTS[nextTier];
   if (reputation >= req.minRep && netWorth >= req.minNetWorth) {
@@ -58,12 +152,24 @@ export function applyTierPromotion(state: GameState): GameState {
 
   if (!eligible) return state;
 
+  // Unlock newly accessible districts
+  const updatedDistricts = { ...state.districts };
+  for (const [id, district] of Object.entries(updatedDistricts)) {
+    if (isDistrictUnlockedForTier(id as DistrictId, eligible)) {
+      updatedDistricts[id as DistrictId] = {
+        ...district,
+        unlocked: true,
+      };
+    }
+  }
+
   return {
     ...state,
     player: {
       ...state.player,
       tier: eligible,
     },
+    districts: updatedDistricts,
   };
 }
 
@@ -80,7 +186,7 @@ export interface Skill {
   cost: number;
   description: string;
   effect: {
-    negotiationBonus?: number; // Multiplier or flat bonus
+    negotiationBonus?: number;
     capacityBonus?: number;
     transportCostReduction?: number;
     priceInsightBonus?: number;
@@ -95,7 +201,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Persuasive Rhetoric',
     category: 'trading',
     tier: 1,
-    cost: 10,
+    cost: 5,
     description: 'Improve NPC acceptance threshold in negotiations by 10%.',
     effect: { negotiationBonus: 0.1 },
   },
@@ -104,7 +210,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Price Trend Analysis',
     category: 'trading',
     tier: 1,
-    cost: 15,
+    cost: 8,
     description: 'View detailed supply/demand metrics and arbitrage opportunities.',
     effect: { priceInsightBonus: 1 },
   },
@@ -113,7 +219,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Bulk Transaction Specialist',
     category: 'trading',
     tier: 2,
-    cost: 25,
+    cost: 15,
     description: 'Negotiate better margins on large-volume orders (5+ units).',
     effect: { negotiationBonus: 0.15 },
   },
@@ -124,7 +230,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Warehouse Optimization',
     category: 'logistics',
     tier: 1,
-    cost: 12,
+    cost: 5,
     description: 'Increase storage capacity by 25 kg.',
     effect: { capacityBonus: 25 },
   },
@@ -133,7 +239,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Route Planning Mastery',
     category: 'logistics',
     tier: 1,
-    cost: 18,
+    cost: 8,
     description: 'Reduce inter-district transport costs by 20%.',
     effect: { transportCostReduction: 0.2 },
   },
@@ -142,9 +248,9 @@ export const SKILL_TREE: Skill[] = [
     name: 'Automated Distribution',
     category: 'logistics',
     tier: 2,
-    cost: 30,
-    description: 'Reduce transport costs by 40% and unlock passive restocking.',
-    effect: { transportCostReduction: 0.4 },
+    cost: 15,
+    description: 'Reduce transport costs by 40% and expand storage capacity by another 50 kg.',
+    effect: { transportCostReduction: 0.4, capacityBonus: 50 },
   },
 
   // Influence Skills
@@ -153,7 +259,7 @@ export const SKILL_TREE: Skill[] = [
     name: 'Community Relations',
     category: 'influence',
     tier: 1,
-    cost: 10,
+    cost: 5,
     description: 'Gain 20% more reputation from trades.',
     effect: { reputationMultiplier: 1.2 },
   },
@@ -162,42 +268,35 @@ export const SKILL_TREE: Skill[] = [
     name: 'Syndicate Liaison',
     category: 'influence',
     tier: 2,
-    cost: 25,
+    cost: 12,
     description: 'Gain 50% more reputation from trades and unlock faction missions.',
     effect: { reputationMultiplier: 1.5 },
   },
 ];
 
-export interface PlayerSkills {
-  unlockedSkills: string[];
-  skillPoints: number;
-}
+export function getActivePerks(unlockedSkillIds: string[] = []) {
+  let negotiationBonus = 0;
+  let capacityBonus = 0;
+  let transportCostReduction = 0;
+  let reputationMultiplier = 1;
 
-export function unlockSkill(
-  state: GameState,
-  skillId: string,
-  playerSkills: PlayerSkills
-): { success: boolean; reason?: string; updatedSkills?: PlayerSkills } {
-  const skill = SKILL_TREE.find((s) => s.id === skillId);
-  if (!skill) return { success: false, reason: 'Skill not found' };
-
-  if (playerSkills.unlockedSkills.includes(skillId)) {
-    return { success: false, reason: 'Skill already unlocked' };
+  for (const id of unlockedSkillIds) {
+    const skill = SKILL_TREE.find((s) => s.id === id);
+    if (!skill) continue;
+    if (skill.effect.negotiationBonus) negotiationBonus += skill.effect.negotiationBonus;
+    if (skill.effect.capacityBonus) capacityBonus += skill.effect.capacityBonus;
+    if (skill.effect.transportCostReduction) {
+      transportCostReduction = Math.max(transportCostReduction, skill.effect.transportCostReduction);
+    }
+    if (skill.effect.reputationMultiplier) {
+      reputationMultiplier = Math.max(reputationMultiplier, skill.effect.reputationMultiplier);
+    }
   }
 
-  if (playerSkills.skillPoints < skill.cost) {
-    return { success: false, reason: 'Not enough skill points' };
-  }
-
-  const updatedSkills: PlayerSkills = {
-    unlockedSkills: [...playerSkills.unlockedSkills, skillId],
-    skillPoints: playerSkills.skillPoints - skill.cost,
+  return {
+    negotiationBonus,
+    capacityBonus,
+    transportCostReduction,
+    reputationMultiplier,
   };
-
-  return { success: true, updatedSkills };
-}
-
-export function awardSkillPoints(reputation: number): number {
-  // Award 1 skill point per 50 reputation
-  return Math.floor(reputation / 50);
 }

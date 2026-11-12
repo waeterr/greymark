@@ -1,6 +1,7 @@
 import { District, DistrictId, Faction, FactionId, GameState, Item } from '../types/game.types';
 import { EXTENDED_ITEMS } from './extendedItems';
 import { EXTENDED_NPCS } from './extendedNPCs';
+import { INITIAL_PROPERTIES } from '../game/progression/PlayerProgression';
 
 export const INITIAL_DISTRICTS: Record<DistrictId, District> = {
   old_quarter: {
@@ -44,7 +45,7 @@ export const INITIAL_DISTRICTS: Record<DistrictId, District> = {
     transportCost: 60,
     supplyModifier: 1.4,
     demandModifier: 0.8,
-    unlocked: false,
+    unlocked: true,
     description: 'Container docks connecting Veyra to overseas trade. High volume, frequent supply delays.',
   },
   ashmarket: {
@@ -258,6 +259,9 @@ export const INITIAL_GAME_STATE: GameState = {
         quality: 'standard',
       },
     ],
+    properties: INITIAL_PROPERTIES,
+    unlockedSkills: [],
+    skillPoints: 10,
   },
   districts: INITIAL_DISTRICTS,
   items: EXTENDED_ITEMS,
