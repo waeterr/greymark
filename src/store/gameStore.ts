@@ -5,12 +5,16 @@ import {
   calculateDynamicPrice,
   simulateMarketTick,
 } from '../game/economy/EconomicEngine';
-import { awardTradingReputation } from '../game/factions/FactionEngine';
+import {
+  awardTradingReputation,
+  applyFactionReputationChange,
+} from '../game/factions/FactionEngine';
 import {
   applyTierPromotion,
   getActivePerks,
   SKILL_TREE,
 } from '../game/progression/PlayerProgression';
+import { applyNarrativeChoice } from '../game/narrative/NarrativeEngine';
 
 interface GameStore {
   state: GameState;
@@ -37,6 +41,9 @@ interface GameStore {
   purchaseProperty: (propertyId: string) => { success: boolean; reason?: string };
   unlockPlayerSkill: (skillId: string) => { success: boolean; reason?: string };
   promotePlayerTier: () => { success: boolean; reason?: string };
+  acceptContract: (contractId: string) => { success: boolean; reason?: string };
+  fulfillContract: (contractId: string) => { success: boolean; reason?: string };
+  resolveNarrativeChoice: (choiceIndex: number) => { success: boolean; reason?: string };
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -373,6 +380,104 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return { success: false, reason: 'Requirements not met for promotion' };
     }
     set({ state: promoted });
+    return { success: true };
+  },
+
+  acceptContract: (contractId: string) => {
+    const s = get().state;
+    const contract = s.contracts[contractId];
+    if (!contract) return { success: false, reason: 'Contract requisition not found' };
+    if (contract.status !== 'available') return { success: false, reason: 'Contract is no longer available' };
+
+    set({
+      state: {
+        ...s,
+        contracts: {
+          ...s.contracts,
+          [contractId]: {
+            ...contract,
+            status: 'active',
+          },
+        },
+      },
+    });
+    return { success: true };
+  },
+
+  fulfillContract: (contractId: string) => {
+    const s = get().state;
+    const contract = s.contracts[contractId];
+    if (!contract) return { success: false, reason: 'Contract not found' };
+    if (contract.status !== 'active') return { success: false, reason: 'Contract is not actively pledged' };
+
+    if (contract.targetDistrictId && s.player.currentDistrict !== contract.targetDistrictId) {
+      const targetDistName = s.districts[contract.targetDistrictId]?.name || contract.targetDistrictId;
+      return { success: false, reason: `Must be stationed in ${targetDistName} to complete delivery` };
+    }
+
+    const totalOwned = s.player.inventory
+      .filter((sl) => sl.itemId === contract.targetItemId)
+      .reduce((sum, sl) => sum + sl.quantity, 0);
+
+    if (totalOwned < contract.targetQuantity) {
+      return { success: false, reason: `Requires ${contract.targetQuantity}x in inventory to fulfill` };
+    }
+
+    const item = s.items[contract.targetItemId];
+    const freedWeight = item ? item.weight * contract.targetQuantity : 0;
+
+    let remainingToDeduct = contract.targetQuantity;
+    const updatedInv = s.player.inventory
+      .map((sl) => {
+        if (sl.itemId !== contract.targetItemId || remainingToDeduct <= 0) return sl;
+        const deducted = Math.min(sl.quantity, remainingToDeduct);
+        remainingToDeduct -= deducted;
+        return { ...sl, quantity: sl.quantity - deducted };
+      })
+      .filter((sl) => sl.quantity > 0);
+
+    const perks = getActivePerks(s.player.unlockedSkills);
+    const repGained = Math.round(contract.rewardRep * perks.reputationMultiplier);
+
+    let updatedState: GameState = {
+      ...s,
+      player: {
+        ...s.player,
+        balance: s.player.balance + contract.rewardCash,
+        reputation: s.player.reputation + repGained,
+        currentWeight: Math.max(0, s.player.currentWeight - freedWeight),
+        inventory: updatedInv,
+      },
+      contracts: {
+        ...s.contracts,
+        [contractId]: {
+          ...contract,
+          status: 'completed',
+        },
+      },
+    };
+
+    if (contract.issuerFaction) {
+      updatedState = applyFactionReputationChange(
+        updatedState,
+        contract.issuerFaction,
+        Math.max(2, Math.floor(repGained * 0.6))
+      );
+    }
+
+    set({ state: applyTierPromotion(updatedState) });
+    return { success: true };
+  },
+
+  resolveNarrativeChoice: (choiceIndex: number) => {
+    const s = get().state;
+    if (!s.activeNarrativeEvent) return { success: false, reason: 'No active narrative event' };
+
+    const choice = s.activeNarrativeEvent.choices[choiceIndex];
+    if (!choice) return { success: false, reason: 'Invalid choice index' };
+
+    const nextState = applyNarrativeChoice(s, choice);
+    set({ state: applyTierPromotion(nextState) });
     return { success: true };
   },
 }));

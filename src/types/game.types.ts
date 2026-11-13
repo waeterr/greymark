@@ -182,6 +182,50 @@ export interface EconomicEvent {
   demandMultiplier: number;
 }
 
+export type ContractType = 'delivery' | 'procurement' | 'smuggling' | 'bounty';
+export type ContractStatus = 'available' | 'active' | 'completed' | 'failed';
+
+export interface Contract {
+  id: string;
+  title: string;
+  description: string;
+  type: ContractType;
+  status: ContractStatus;
+  issuer: string;
+  issuerFaction?: FactionId;
+  districtId: DistrictId;
+  targetDistrictId?: DistrictId;
+  targetItemId: string;
+  targetQuantity: number;
+  rewardCash: number;
+  rewardRep: number;
+  penaltyRep: number;
+  deadlineDay: number;
+  deadlineHour: number;
+  riskLevel: 'low' | 'moderate' | 'high' | 'extreme';
+  isContraband?: boolean;
+}
+
+export interface NarrativeChoice {
+  text: string;
+  effect: {
+    cashDelta?: number;
+    repDelta?: number;
+    factionId?: FactionId;
+    factionRepDelta?: number;
+    confiscateContraband?: boolean;
+  };
+  outcomeDescription: string;
+}
+
+export interface NarrativeEvent {
+  id: string;
+  title: string;
+  description: string;
+  districtId?: DistrictId;
+  choices: NarrativeChoice[];
+}
+
 export interface GameState {
   seed: string;
   time: GameTime;
@@ -192,6 +236,8 @@ export interface GameState {
   factions: Record<FactionId, Faction>;
   transactions: Transaction[];
   activeEvents: EconomicEvent[];
+  contracts: Record<string, Contract>;
+  activeNarrativeEvent?: NarrativeEvent | null;
 }
 
 export type NavView =

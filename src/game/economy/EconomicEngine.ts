@@ -14,6 +14,7 @@ import {
   calculatePassiveIncome,
   applyTierPromotion,
 } from '../progression/PlayerProgression';
+import { processContractDeadlines } from '../narrative/NarrativeEngine';
 
 export const EVENT_POOL: Omit<EconomicEvent, 'id' | 'remainingDays'>[] = [
   {
@@ -269,6 +270,9 @@ export function simulateMarketTick(
   const afterFactionConflicts = simulateFactionConflict(afterNpcTrading);
   const afterDistrictMods = applyFactionDistrictModifiers(afterFactionConflicts);
 
+  // Process contract deadlines and narrative events
+  const afterContracts = processContractDeadlines(afterDistrictMods);
+
   // Check and apply tier promotion
-  return applyTierPromotion(afterDistrictMods);
+  return applyTierPromotion(afterContracts);
 }

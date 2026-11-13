@@ -2,6 +2,7 @@ import { District, DistrictId, Faction, FactionId, GameState, Item } from '../ty
 import { EXTENDED_ITEMS } from './extendedItems';
 import { EXTENDED_NPCS } from './extendedNPCs';
 import { INITIAL_PROPERTIES } from '../game/progression/PlayerProgression';
+import { INITIAL_CONTRACTS } from '../game/narrative/NarrativeEngine';
 
 export const INITIAL_DISTRICTS: Record<DistrictId, District> = {
   old_quarter: {
@@ -300,4 +301,6 @@ export const INITIAL_GAME_STATE: GameState = {
       hour: 7,
     },
   ],
+  contracts: INITIAL_CONTRACTS,
+  activeNarrativeEvent: null,
 };
