@@ -135,4 +135,31 @@ assert.ok(typeof perks.negotiationBonus === 'number', 'Perks calculation must re
 const privileges = checkFactionPrivileges('syndicate', 55);
 assert.equal(privileges.canAccessExclusiveContracts, true, '55 REP should unlock contracts');
 
-console.log('Greymark Contracts & Narrative self-check PASSED: all checks verified.');
+// 9. Procedural Audio & UI Atmosphere Polish
+import { sound } from '../game/audio/SoundEngine';
+import { useUIStore } from '../store/uiStore';
+
+// Procedural sound synthesizer should safely execute without throwing in headless environments
+assert.doesNotThrow(() => {
+  sound.playClick();
+  sound.playTradeSuccess();
+  sound.playError();
+  sound.playTick();
+  sound.playContractComplete();
+  sound.playAlert();
+}, 'Sound engine methods must be robust in any environment');
+
+// Audio toggle in UIStore
+assert.equal(useUIStore.getState().soundEnabled, true, 'Sound should be enabled by default');
+useUIStore.getState().toggleSound();
+assert.equal(useUIStore.getState().soundEnabled, false, 'toggleSound must toggle soundEnabled to false');
+assert.equal(sound.isMuted, true, 'Mute state should sync to SoundEngine');
+useUIStore.getState().toggleSound();
+assert.equal(useUIStore.getState().soundEnabled, true, 'toggleSound must re-enable sound');
+
+// CRT styling toggle
+assert.equal(useUIStore.getState().crtGlow, false, 'CRT glow should default to off');
+useUIStore.getState().toggleCrtGlow();
+assert.equal(useUIStore.getState().crtGlow, true, 'toggleCrtGlow must toggle state to true');
+
+console.log('Greymark Polish & Procedural Audio self-check PASSED: all checks verified.');

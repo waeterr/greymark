@@ -1,7 +1,8 @@
 import React from 'react';
-import { Menu, Coins, MapPin, Clock, Weight, FastForward } from 'lucide-react';
+import { Menu, Coins, MapPin, Clock, Weight, FastForward, Volume2, VolumeX, Tv } from 'lucide-react';
 import { useGameStore } from '../../store/gameStore';
 import { useUIStore } from '../../store/uiStore';
+import { sound } from '../../game/audio/SoundEngine';
 
 export const Header: React.FC = () => {
   const player = useGameStore((s) => s.state.player);
@@ -9,9 +10,14 @@ export const Header: React.FC = () => {
   const district = useGameStore((s) => s.state.districts[player.currentDistrict]);
   const advanceTime = useGameStore((s) => s.advanceTime);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const soundEnabled = useUIStore((s) => s.soundEnabled);
+  const toggleSound = useUIStore((s) => s.toggleSound);
+  const crtGlow = useUIStore((s) => s.crtGlow);
+  const toggleCrtGlow = useUIStore((s) => s.toggleCrtGlow);
   const addToast = useUIStore((s) => s.addToast);
 
   const handleAdvance = (hours: number) => {
+    sound.playTick();
     advanceTime(hours);
     addToast(`Advanced simulation +${hours}h. Market prices and supply shifted.`, 'info');
   };
@@ -83,6 +89,33 @@ export const Header: React.FC = () => {
           <span className="num-mono text-xs font-semibold text-terminal-gold">
             ${player.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
+        </div>
+
+        {/* Audio & CRT Polish Controls */}
+        <div className="hidden sm:flex items-center gap-1 border-l border-terminal-border pl-2">
+          <button
+            onClick={toggleSound}
+            title={soundEnabled ? 'Mute Procedural Audio (M)' : 'Enable Procedural Audio (M)'}
+            className={`p-1.5 rounded transition-colors ${
+              soundEnabled
+                ? 'text-terminal-gold hover:bg-terminal-surface'
+                : 'text-terminal-muted hover:text-terminal-text hover:bg-terminal-surface'
+            }`}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          <button
+            onClick={toggleCrtGlow}
+            title={crtGlow ? 'Disable Retro Scanlines' : 'Enable Retro Scanlines'}
+            className={`p-1.5 rounded transition-colors ${
+              crtGlow
+                ? 'text-terminal-green bg-terminal-green/10'
+                : 'text-terminal-muted hover:text-terminal-text hover:bg-terminal-surface'
+            }`}
+          >
+            <Tv className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </header>
